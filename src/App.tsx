@@ -44,7 +44,25 @@ import {
   WarningRegular
 } from '@fluentui/react-icons';
 import { useGetWorkPackageQuery, useSubmitCardMutation } from './api';
-import { authorizeOverride, refreshVersion, releasePackage, selectCard, setConflict, signStage, toggleOffline, updateCard, type RootState } from './store';
+import {
+  authorizeOverride,
+  bumpCardRevision,
+  changeGaugeCertStatus,
+  changeGaugeRange,
+  claimGauge,
+  confirmRetest,
+  refreshVersion,
+  releaseGauge,
+  releasePackage,
+  retestMeasurement,
+  selectCard,
+  setConflict,
+  signStage,
+  submitMeasurement,
+  toggleOffline,
+  updateCard,
+  type RootState
+} from './store';
 
 type NavItem = { path: string; label: string; icon: ReactNode };
 
@@ -54,6 +72,7 @@ function Shell({ children }: { children: ReactNode }) {
   const nav: NavItem[] = [
     { path: '/', label: '工作包总览', icon: <ClipboardTaskListLtrRegular /> },
     { path: '/execution', label: '工卡执行', icon: <BookOpenRegular /> },
+    { path: '/gauges', label: '压力表台账', icon: <GaugeRegular /> },
     { path: '/release', label: '放行审阅', icon: <LockClosedRegular /> },
     { path: '/audit', label: '审计与差异', icon: <HistoryRegular /> }
   ];
@@ -140,10 +159,22 @@ function Execution() {
   const [consumable, setConsumable] = useState('');
   const [witness, setWitness] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [gaugeId, setGaugeId] = useState('');
+  const [simulateFail, setSimulateFail] = useState(false);
+  const [retestFor, setRetestFor] = useState<string | null>(null);
+  const [retestStep, setRetestStep] = useState<'confirm' | 'execute'>('confirm');
+  const [retestAuthority, setRetestAuthority] = useState('');
+  const [retestGaugeId, setRetestGaugeId] = useState('');
+  const [retestValue, setRetestValue] = useState('');
   const [submitCard] = useSubmitCardMutation();
   useEffect(() => { setMeasurement(card.measurement); setFinding(card.finding); }, [card.id, card.measurement, card.finding]);
   const toleranceIssue = card.id === 'CARD-03' && Number.parseFloat(measurement) < 2850;
   const dependenciesMet = card.dependencies.every((dependency) => state.cards.find((item) => item.id === dependency)?.status === '已完成');
+  const isPressureCard = card.id === 'CARD-03';
+  const cardGauge = state.gauges.find((item) => item.occupiedBy === card.id);
+  const latestMeasurement = state.measurements.find((item) => item.cardId === card.id);
+  const idempotencyKey = `idem-${card.id}`;
+  const availableGauges = state.gauges.filter((item) => item.certStatus === '有效' && (!item.occupiedBy || item.occupiedBy === card.id));
   const complete = async () => {
     if (!dependenciesMet) {
       dispatch(setConflict(`前置工卡 ${card.dependencies.join('、')} 尚未完成。`));
@@ -161,6 +192,10 @@ function Execution() {
       dispatch(setConflict('检测到冲突提交：本地版本与服务器版本不一致，请刷新后重试。'));
       return;
     }
+    if (isPressureCard && !state.measurements.some((item) => item.cardId === card.id && item.status === '有效')) {
+      dispatch(setConflict('压力测试必须先占用有效压力表并提交测量，建立有效测量链。'));
+      return;
+    }
     const result = await submitCard({ cardId: card.id, expectedRevision: state.serverVersion, measurement, finding }).unwrap().catch((error) => {
       dispatch(setConflict(error.data?.message ?? '提交失败，请重试。'));
       return null;
@@ -169,6 +204,32 @@ function Execution() {
       dispatch(updateCard({ measurement, finding, status: '已完成' }));
       dispatch(setConflict(''));
     }
+  };
+  const submitGaugeMeasurement = () => {
+    if (!cardGauge) {
+      dispatch(setConflict('请先占用一只有效压力表。'));
+      return;
+    }
+    dispatch(submitMeasurement({ cardId: card.id, gaugeId: cardGauge.id, value: measurement, inspector: '宋杰', idempotencyKey, simulateFail }));
+  };
+  const openRetest = (recordId: string) => {
+    setRetestFor(recordId);
+    setRetestStep('confirm');
+    setRetestAuthority('');
+    setRetestGaugeId('');
+    setRetestValue('');
+  };
+  const confirmRetestDialog = () => {
+    if (!retestFor) return;
+    if (retestStep === 'confirm') {
+      if (!retestAuthority.trim()) { dispatch(setConflict('复测必须由质量授权人确认。')); return; }
+      dispatch(confirmRetest({ measurementId: retestFor, authorizedBy: retestAuthority }));
+      setRetestStep('execute');
+      return;
+    }
+    if (!retestGaugeId) { dispatch(setConflict('请选择复测占用的有效压力表。')); return; }
+    dispatch(retestMeasurement({ measurementId: retestFor, gaugeId: retestGaugeId, value: retestValue || measurement, inspector: '宋杰' }));
+    setRetestFor(null);
   };
   return (
     <div className="page">
@@ -196,7 +257,71 @@ function Execution() {
           <section className="panel evidence-panel"><div className="panel-head"><h2>证据附件</h2><Badge appearance="tint">3 项</Badge></div>{['IMG_20260929_0904.jpg', '液压测试原始记录.pdf', '见证签字单_宋杰.pdf'].map((file, index) => <div className="evidence-row" key={file}><DocumentBulletListRegular /><div><strong>{file}</strong><small>{index + 1}.8 MB · 09:1{index}</small></div><Button size="small" appearance="subtle">预览</Button></div>)}</section>
         </aside>
       </div>
+      {isPressureCard && (
+        <section className="panel gauge-chain-panel">
+          <div className="panel-head"><div><h2>压力表占用与测量链</h2><span>每张工卡占用一只有效压力表 · 先到者占用 · 原值保留待复测</span></div><Badge appearance="tint" color={latestMeasurement?.status === '有效' ? 'success' : latestMeasurement?.status === '失效' ? 'danger' : 'warning'}>{latestMeasurement ? `链状态：${latestMeasurement.status}` : '未建链'}</Badge></div>
+          <div className="gauge-chain-grid">
+            <div className="gauge-occupy">
+              <h3>1 · 占用压力表</h3>
+              <Field label="选择有效压力表">
+                <select value={gaugeId} onChange={(event) => setGaugeId(event.target.value)}>
+                  <option value="">{cardGauge ? `${cardGauge.id} 已占用` : '请选择压力表'}</option>
+                  {state.gauges.map((gauge) => <option key={gauge.id} value={gauge.id} disabled={gauge.certStatus !== '有效' || (Boolean(gauge.occupiedBy) && gauge.occupiedBy !== card.id)}>{gauge.id} {gauge.name} · {gauge.range} · 证{gauge.certStatus}{gauge.occupiedBy ? `（${gauge.occupiedBy} 占用中）` : ''}</option>)}
+                </select>
+              </Field>
+              <div className="gauge-occupy-actions">
+                <Button appearance="primary" icon={<GaugeRegular />} onClick={() => { if (gaugeId) dispatch(claimGauge({ cardId: card.id, gaugeId })); }} disabled={!gaugeId}>占用</Button>
+                <Button appearance="secondary" onClick={() => dispatch(releaseGauge({ cardId: card.id }))} disabled={!cardGauge}>释放</Button>
+              </div>
+              {cardGauge && <div className="gauge-cert-card"><strong>{cardGauge.name}</strong><small>量程 {cardGauge.range}</small><small>校准证 {cardGauge.certNo} · {cardGauge.certStatus} · 至 {cardGauge.certExpiry}</small></div>}
+            </div>
+            <div className="gauge-submit">
+              <h3>2 · 提交压力测量</h3>
+              <Field label="现场读数" hint={card.tolerance}><Input value={measurement} onChange={(_, data) => setMeasurement(data.value)} contentBefore={<GaugeRegular />} /></Field>
+              <label className="fail-toggle"><Checkbox checked={simulateFail} onChange={(_, data) => setSimulateFail(Boolean(data.checked))} /><span>模拟写入失败（演示：占用与现场读数保留，可按原请求恢复）</span></label>
+              <div className="gauge-occupy-actions">
+                <Button appearance="primary" onClick={submitGaugeMeasurement} disabled={!cardGauge}>提交测量</Button>
+                {latestMeasurement?.writeFailed && <Button appearance="secondary" icon={<ArrowSyncRegular />} onClick={submitGaugeMeasurement}>按原请求恢复</Button>}
+              </div>
+              {latestMeasurement?.writeFailed && <MessageBar intent="warning"><MessageBarBody>写入失败：压力表 {cardGauge?.id} 占用与现场读数 {latestMeasurement.value} 已保留，幂等键 {latestMeasurement.idempotencyKey}，可按原请求恢复。</MessageBarBody></MessageBar>}
+            </div>
+            <div className="gauge-chain-status">
+              <h3>3 · 链状态与复测</h3>
+              {latestMeasurement ? (
+                <div className="chain-mini">
+                  <div className="chain-mini-row"><span>测量</span><Badge appearance="tint" color={latestMeasurement.status === '有效' ? 'success' : latestMeasurement.status === '失效' ? 'danger' : 'warning'}>{latestMeasurement.status}</Badge><strong>{latestMeasurement.value}</strong></div>
+                  <div className="chain-mini-row"><span>校准证</span><Badge appearance="tint" color={latestMeasurement.certStatus === '有效' ? 'success' : 'danger'}>{latestMeasurement.certStatus}</Badge><small>{latestMeasurement.certNo}</small></div>
+                  <div className="chain-mini-row"><span>阶段签字</span>{(() => { const sig = state.signatures.find((item) => item.stage === card.stage.replace('签署', '')); return sig ? <Badge appearance="tint" color={sig.status === '已签署' && !sig.invalid ? 'success' : 'danger'}>{sig.invalid ? '已失效' : sig.status}</Badge> : <Badge>无</Badge>; })()}</div>
+                  {latestMeasurement.originalValue && <div className="chain-mini-row"><span>原值</span><small className="original-value">{latestMeasurement.originalValue}（保留待复测）</small></div>}
+                  {latestMeasurement.status === '失效' && <Button appearance="primary" size="small" onClick={() => openRetest(latestMeasurement.id)}>申请复测</Button>}
+                  {latestMeasurement.status === '待复测' && latestMeasurement.retestConfirmedBy && <><MessageBar intent="success"><MessageBarBody>复测已由 {latestMeasurement.retestConfirmedBy} 确认（{latestMeasurement.retestConfirmedAt}）。</MessageBarBody></MessageBar><Button appearance="primary" size="small" onClick={() => openRetest(latestMeasurement.id)}>执行复测</Button></>}
+                </div>
+              ) : <small>尚未建立测量链。</small>}
+              <Button appearance="subtle" size="small" onClick={() => dispatch(bumpCardRevision({ cardId: card.id }))}>工卡版本变更（演示失效）</Button>
+            </div>
+          </div>
+        </section>
+      )}
       <Dialog open={overrideOpen} onOpenChange={(_, data) => setOverrideOpen(data.open)}><DialogSurface><DialogBody><DialogTitle>超差授权处理</DialogTitle><DialogContent>批准后将在工卡中记录授权人、工程指令编号与处置依据，原始测量值不会被覆盖。<Field label="工程指令编号" required className="dialog-field"><Input defaultValue="EO-2026-1147" /></Field><Field label="授权依据" required className="dialog-field"><Textarea defaultValue="按 AMM 容差分析并经工程部门确认，允许执行复测与系统恢复。" /></Field></DialogContent><DialogActions><Button appearance="secondary" onClick={() => setOverrideOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { dispatch(authorizeOverride()); setOverrideOpen(false); }}>确认授权</Button></DialogActions></DialogBody></DialogSurface></Dialog>
+      <Dialog open={Boolean(retestFor)} onOpenChange={(_, data) => { if (!data.open) setRetestFor(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{retestStep === 'confirm' ? '复测授权确认' : '执行复测'}</DialogTitle>
+            <DialogContent>
+              {retestStep === 'confirm'
+                ? '校准证、量程或工卡版本变更导致原测量与阶段签字失效，原值保留待复测。复测须由质量授权人确认后重新建立测量链。'
+                : '复测已授权。请占用有效压力表并输入现场读数，原测量值保留在链记录中。'}
+              {retestStep === 'confirm'
+                ? <Field label="质量授权人" required className="dialog-field"><Input value={retestAuthority} onChange={(_, data) => setRetestAuthority(data.value)} placeholder="如：质量经理 · 周敏" /></Field>
+                : <><Field label="复测压力表" required className="dialog-field"><select value={retestGaugeId} onChange={(event) => setRetestGaugeId(event.target.value)}><option value="">请选择有效压力表</option>{availableGauges.map((gauge) => <option key={gauge.id} value={gauge.id}>{gauge.id} {gauge.name} · {gauge.range}</option>)}</select></Field><Field label="复测读数" className="dialog-field"><Input value={retestValue || measurement} onChange={(_, data) => setRetestValue(data.value)} contentBefore={<GaugeRegular />} /></Field></>}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setRetestFor(null)}>取消</Button>
+              <Button appearance="primary" onClick={confirmRetestDialog}>{retestStep === 'confirm' ? '确认授权复测' : '提交复测'}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }
@@ -206,11 +331,13 @@ function Release() {
   const dispatch = useDispatch();
   const [tab, setTab] = useState('open');
   const blockers = state.cards.filter((card) => card.status !== '已完成' && card.status !== '未开始');
-  const allSigned = state.signatures.every((item) => item.status === '已签署');
+  const allSigned = state.signatures.every((item) => item.status === '已签署' && !item.invalid);
+  const chainBroken = state.measurements.some((item) => item.status === '失效');
   return (
     <div className="page">
-      <PageHeading eyebrow="RELEASE REVIEW / B-7891" title="放行审阅" description="核对未关闭项目、重复缺陷、关键证据与阶段签字。" actions={<Button appearance="primary" icon={<LockClosedRegular />} disabled={!allSigned || blockers.some((card) => card.status === '待授权')} onClick={() => dispatch(releasePackage())}>{state.released ? '工作包已锁定' : '锁定并放行'}</Button>} />
+      <PageHeading eyebrow="RELEASE REVIEW / B-7891" title="放行审阅" description="核对未关闭项目、重复缺陷、关键证据与阶段签字；测量链失效时不得放行。" actions={<Button appearance="primary" icon={<LockClosedRegular />} disabled={!allSigned || blockers.some((card) => card.status === '待授权') || chainBroken} onClick={() => dispatch(releasePackage())}>{state.released ? '工作包已锁定' : '锁定并放行'}</Button>} />
       {state.released && <MessageBar intent="success" className="top-message"><MessageBarBody>工作包已锁定，形成只读放行基线并纳入审计记录。</MessageBarBody></MessageBar>}
+      {chainBroken && <MessageBar intent="error" className="top-message"><MessageBarBody><strong>测量链失效：</strong>存在校准证、量程或工卡版本变更导致的失效测量与签字，原值保留待复测，复测并重新签署前不能放行。</MessageBarBody></MessageBar>}
       <div className="release-grid">
         <section className="panel release-main">
           <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(String(data.value))}><Tab value="open">未关闭项目 <Badge>{blockers.length}</Badge></Tab><Tab value="repeat">重复缺陷 <Badge>2</Badge></Tab><Tab value="evidence">关键证据 <Badge>12</Badge></Tab></TabList>
@@ -221,8 +348,8 @@ function Release() {
           </div>
         </section>
         <aside className="release-side">
-          <section className="panel signoff-card"><div className="panel-head"><h2>分阶段签字</h2><span>{state.signatures.filter((item) => item.status === '已签署').length} / 4</span></div>{state.signatures.map((item) => <div className="signoff-row" key={item.stage}><div><span>{item.stage}</span><strong>{item.actor}</strong><small>{item.time}</small></div>{item.status === '已签署' ? <Badge appearance="tint" color="success">已签署</Badge> : <Button size="small" appearance="primary" onClick={() => dispatch(signStage(item.stage))}>签署</Button>}</div>)}</section>
-          <section className="panel release-gate-card"><LockClosedRegular /><h3>放行门禁</h3><label><Checkbox checked={!blockers.some((card) => card.status === '待授权')} readOnly /> 无待授权超差项目</label><label><Checkbox checked={state.cards.filter((card) => card.status === '已完成').length >= 6} readOnly /> 关键工卡完成率 ≥ 75%</label><label><Checkbox checked={allSigned} readOnly /> 四个阶段均完成电子签署</label><label><Checkbox checked /> 审计记录和证据附件完整</label></section>
+          <section className="panel signoff-card"><div className="panel-head"><h2>分阶段签字</h2><span>{state.signatures.filter((item) => item.status === '已签署' && !item.invalid).length} / 4</span></div>{state.signatures.map((item) => <div className="signoff-row" key={item.stage}><div><span>{item.stage}</span><strong>{item.actor}</strong><small>{item.time}</small></div>{item.invalid ? <Badge appearance="tint" color="danger">已失效 · 待重签</Badge> : item.status === '已签署' ? <Badge appearance="tint" color="success">已签署</Badge> : <Button size="small" appearance="primary" onClick={() => dispatch(signStage(item.stage))}>签署</Button>}</div>)}</section>
+          <section className="panel release-gate-card"><LockClosedRegular /><h3>放行门禁</h3><label><Checkbox checked={!blockers.some((card) => card.status === '待授权')} readOnly /> 无待授权超差项目</label><label><Checkbox checked={state.cards.filter((card) => card.status === '已完成').length >= 6} readOnly /> 关键工卡完成率 ≥ 75%</label><label><Checkbox checked={allSigned} readOnly /> 四个阶段均完成电子签署</label><label><Checkbox checked={!chainBroken} readOnly /> 测量链有效（无失效测量 / 签字）</label><label><Checkbox checked /> 审计记录和证据附件完整</label></section>
         </aside>
       </div>
     </div>
@@ -257,6 +384,102 @@ function Audit() {
   );
 }
 
+function GaugesPage() {
+  const state = useSelector((root: RootState) => root.maintenance);
+  const dispatch = useDispatch();
+  const [rangeDrafts, setRangeDrafts] = useState<Record<string, string>>({});
+  const statusColor = (status: string) => (status === '有效' ? 'success' : status === '到期' ? 'warning' : 'danger');
+  return (
+    <div className="page">
+      <PageHeading
+        eyebrow="GAUGE & CALIBRATION"
+        title="压力表台账与校准链"
+        description="每只压力表与校准证绑定；校准状态、量程或工卡版本一变，关联测量与阶段签字立即失效，原值保留待复测。"
+      />
+      <MessageBar intent="info" className="top-message">
+        <MessageBarBody>
+          <strong>放行链：</strong>压力测量 → 校准证 → 阶段签字 → 放行基线。任一环节失效，后续环节不得带隐患放行；复测由质量授权人确认后重新建立。
+        </MessageBarBody>
+      </MessageBar>
+      <div className="panel">
+        <div className="panel-head"><div><h2>共用液压压力表</h2><span>机库共用 · 先到者占用 · 证到期或撤掉即失效</span></div><Badge appearance="tint">{state.gauges.length} 只</Badge></div>
+        <div className="gauge-table">
+          <div className="gauge-head"><span>表号 / 名称</span><span>量程</span><span>校准证</span><span>占用</span><span>关联测量</span><span>操作</span></div>
+          {state.gauges.map((gauge) => {
+            const linked = state.measurements.filter((item) => item.gaugeId === gauge.id);
+            const invalidCount = linked.filter((item) => item.status === '失效').length;
+            return (
+              <div className="gauge-row" key={gauge.id}>
+                <div><strong>{gauge.id}</strong><small>{gauge.name}</small></div>
+                <div>
+                  <input
+                    className="range-input"
+                    value={rangeDrafts[gauge.id] ?? gauge.range}
+                    onChange={(event) => setRangeDrafts((prev) => ({ ...prev, [gauge.id]: event.target.value }))}
+                  />
+                  <Button size="small" appearance="subtle" onClick={() => { const next = rangeDrafts[gauge.id]; if (next && next !== gauge.range) dispatch(changeGaugeRange({ gaugeId: gauge.id, range: next })); }}>变更量程</Button>
+                </div>
+                <div>
+                  <Badge appearance="tint" color={statusColor(gauge.certStatus)}>{gauge.certStatus}</Badge>
+                  <small>{gauge.certNo} · 至 {gauge.certExpiry}</small>
+                </div>
+                <div>{gauge.occupiedBy ? <Tag appearance="outline" color="warning">{gauge.occupiedBy} 占用中</Tag> : <small>空闲</small>}{gauge.occupiedAt && <small>{gauge.occupiedAt}</small>}</div>
+                <div>
+                  <small>{linked.length} 条 · {invalidCount > 0 ? <span className="invalid-text">{invalidCount} 条失效</span> : '全部有效'}</small>
+                </div>
+                <div className="gauge-actions">
+                  {gauge.certStatus === '有效'
+                    ? <Button size="small" appearance="secondary" onClick={() => dispatch(changeGaugeCertStatus({ gaugeId: gauge.id, certStatus: '到期' }))}>证到期</Button>
+                    : <Button size="small" appearance="primary" onClick={() => dispatch(changeGaugeCertStatus({ gaugeId: gauge.id, certStatus: '有效' }))}>恢复有效</Button>}
+                  {gauge.certStatus !== '已撤' && <Button size="small" appearance="secondary" onClick={() => dispatch(changeGaugeCertStatus({ gaugeId: gauge.id, certStatus: '已撤' }))}>撤证</Button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <section className="panel chain-panel">
+        <div className="panel-head"><div><h2>测量与签字链</h2><span>原值保留 · 复测由质量授权人确认</span></div></div>
+        {state.measurements.length === 0 && <div className="chain-empty">暂无压力测量记录。在工卡执行中占用压力表并提交测量。</div>}
+        {state.measurements.map((record) => {
+          const card = state.cards.find((item) => item.id === record.cardId);
+          const stageName = card?.stage.replace('签署', '') ?? '';
+          const signature = state.signatures.find((item) => item.stage === stageName);
+          return (
+            <div className="chain-row" key={record.id}>
+              <div className="chain-node">
+                <Badge appearance="tint" color={record.status === '有效' ? 'success' : record.status === '失效' ? 'danger' : 'warning'}>{record.status}</Badge>
+                <strong>{record.value}</strong>
+                <small>{record.id} · {record.cardId} · {record.measuredAt}</small>
+                {record.originalValue && <small className="original-value">原值保留：{record.originalValue}</small>}
+                {record.invalidReason && <small className="invalid-text">{record.invalidReason}</small>}
+              </div>
+              <i />
+              <div className="chain-node">
+                <Badge appearance="tint" color={record.certStatus === '有效' ? 'success' : 'danger'}>{record.certStatus}</Badge>
+                <strong>{record.certNo}</strong>
+                <small>{record.gaugeName}</small>
+              </div>
+              <i />
+              <div className="chain-node">
+                {signature
+                  ? <><Badge appearance="tint" color={signature.status === '已签署' && !signature.invalid ? 'success' : 'danger'}>{signature.invalid ? '已失效' : signature.status}</Badge><strong>{signature.stage}签署</strong><small>{signature.actor} · {signature.time}</small></>
+                  : <small>无关联签字</small>}
+              </div>
+              <i />
+              <div className="chain-node">
+                <Badge appearance="tint" color={state.released ? 'success' : 'informative'}>{state.released ? '已锁定' : '未锁定'}</Badge>
+                <strong>放行基线</strong>
+                <small>WP-B7891-04</small>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}
+
 function NotFound() {
   return <Navigate to="/" replace />;
 }
@@ -265,7 +488,7 @@ export default function App() {
   return (
     <FluentProvider theme={webLightTheme}>
       <BrowserRouter>
-        <Shell><Routes><Route path="/" element={<Overview />} /><Route path="/execution" element={<Execution />} /><Route path="/release" element={<Release />} /><Route path="/audit" element={<Audit />} /><Route path="*" element={<NotFound />} /></Routes></Shell>
+        <Shell><Routes><Route path="/" element={<Overview />} /><Route path="/execution" element={<Execution />} /><Route path="/gauges" element={<GaugesPage />} /><Route path="/release" element={<Release />} /><Route path="/audit" element={<Audit />} /><Route path="*" element={<NotFound />} /></Routes></Shell>
       </BrowserRouter>
     </FluentProvider>
   );

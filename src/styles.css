@@ -156,6 +156,56 @@ button, input, textarea, select { font: inherit; }
 .audit-row p { margin: 5px 0; font-size: 10px; color: #596c78; }
 .audit-row small { font-size: 9px; color: var(--muted); }
 
+/* 压力表台账 */
+.gauge-table { padding: 4px 0; }
+.gauge-head, .gauge-row { display: grid; grid-template-columns: 1.4fr 1.2fr 1.3fr 1fr .9fr 1.3fr; gap: 12px; padding: 12px 16px; align-items: center; border-bottom: 1px solid #edf1f3; font-size: 11px; }
+.gauge-head { background: #f5f8fa; color: var(--muted); font-size: 9px; font-weight: 700; border-bottom: 1px solid var(--line); }
+.gauge-row:last-child { border-bottom: 0; }
+.gauge-row strong, .gauge-row small { display: block; }
+.gauge-row strong { font-size: 12px; }
+.gauge-row small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+.range-input { width: 110px; height: 28px; border: 1px solid #ccd6dd; border-radius: 4px; padding: 0 8px; font-size: 11px; margin-bottom: 4px; }
+.gauge-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.invalid-text { color: var(--red); }
+
+/* 测量链 */
+.chain-panel { margin-top: 15px; }
+.chain-empty { padding: 26px; text-align: center; color: var(--muted); font-size: 11px; }
+.chain-row { display: grid; grid-template-columns: minmax(0, 1.6fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr); align-items: center; gap: 6px; padding: 14px 16px; border-bottom: 1px solid #edf1f3; }
+.chain-row:last-child { border-bottom: 0; }
+.chain-row > i { width: 24px; height: 1px; background: #9cb5c3; }
+.chain-node { display: flex; flex-direction: column; gap: 4px; }
+.chain-node strong { font-size: 12px; }
+.chain-node small { color: var(--muted); font-size: 9px; }
+.chain-node .fui-Badge { align-self: flex-start; }
+.original-value { color: var(--amber); }
+
+/* 工卡执行 - 压力表链面板 */
+.gauge-chain-panel { margin-top: 15px; }
+.gauge-chain-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; padding: 16px; }
+.gauge-chain-grid h3 { margin: 0 0 12px; font-size: 12px; color: var(--navy); }
+.gauge-occupy-actions { display: flex; gap: 8px; margin-top: 10px; }
+.gauge-cert-card { margin-top: 12px; padding: 10px 12px; border: 1px solid #d7e6ef; background: #f2f8fb; border-radius: 5px; display: flex; flex-direction: column; gap: 3px; }
+.gauge-cert-card strong { font-size: 11px; }
+.gauge-cert-card small { font-size: 9px; color: var(--muted); }
+.fail-toggle { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 10px; color: var(--muted); }
+.gauge-submit .fui-MessageBar { margin-top: 12px; }
+.chain-mini { display: flex; flex-direction: column; gap: 8px; }
+.chain-mini-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.chain-mini-row > span:first-child { color: var(--muted); width: 56px; flex: none; }
+.chain-mini-row strong { font-size: 12px; }
+.chain-mini-row small { font-size: 9px; }
+.chain-mini .fui-Button { align-self: flex-start; }
+
+@media (max-width: 1100px) {
+  .gauge-chain-grid { grid-template-columns: 1fr; }
+  .gauge-head, .gauge-row { grid-template-columns: 1.2fr 1fr 1.2fr; }
+  .gauge-head span:nth-child(4), .gauge-row > div:nth-child(4),
+  .gauge-head span:nth-child(5), .gauge-row > div:nth-child(5) { display: none; }
+  .chain-row { grid-template-columns: 1fr; gap: 4px; }
+  .chain-row > i { display: none; }
+}
+
 @media (max-width: 1100px) {
   .overview-grid, .execution-grid, .release-grid, .audit-grid { grid-template-columns: 1fr; }
   .overview-side, .execution-side, .release-side { grid-template-columns: 1fr 1fr; }
