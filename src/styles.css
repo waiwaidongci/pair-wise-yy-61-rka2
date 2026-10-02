@@ -156,11 +156,81 @@ button, input, textarea, select { font: inherit; }
 .audit-row p { margin: 5px 0; font-size: 10px; color: #596c78; }
 .audit-row small { font-size: 9px; color: var(--muted); }
 
+/* ===== 压力链：占用 / 校准 / 级联失效 / 放行基线 ===== */
+.native-select { height: 32px; border: 1px solid #ccd6dd; border-radius: 4px; background: white; padding: 0 8px; min-width: 0; width: 100%; }
+.pending-bar { margin: 12px 27px 0; max-width: 1660px; }
+.head-badges { display: flex; align-items: center; gap: 8px; }
+.signature-row > span.invalid { background: #fae8e7; color: var(--red); }
+.task-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.pressure-chain-block { padding: 16px; border-bottom: 1px solid var(--line); background: #fbfdfe; }
+.chain-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 13px; }
+.chain-bar span { padding: 5px 9px; border: 1px solid #bad1df; border-radius: 4px; font-size: 10px; color: #245b7e; background: #f2f8fb; white-space: nowrap; }
+.chain-bar span.ok { border-color: #8fc9ac; color: var(--green); background: #e8f5ef; }
+.chain-bar span.bad { border-color: #df9c9b; color: var(--red); background: #fdeceb; }
+.chain-bar i { width: 14px; height: 1px; background: #9cb5c3; }
+.chain-status { border: 1px solid #df9c9b; background: #fdf3f3; border-radius: 5px; padding: 11px 13px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 13px; }
+.chain-status.valid { border-color: #8fc9ac; background: #f1f8f4; }
+.chain-status strong, .chain-status small { display: block; }
+.chain-status small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+.chain-status .fui-Badge { align-self: flex-start; }
+.chain-invalid { margin: 0; font-size: 10px; color: var(--red); line-height: 1.55; }
+.chain-hint { margin: 0 0 13px; font-size: 10px; color: var(--amber); background: #fff7e8; border: 1px solid #ebcf9d; border-radius: 5px; padding: 10px 12px; line-height: 1.55; }
+.gauge-form { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; align-items: end; }
+.gauge-actions { display: flex; flex-direction: column; gap: 6px; }
+.gauge-actions small { font-size: 9px; color: var(--muted); line-height: 1.4; }
+.chain-history-panel .retained-note { display: flex; gap: 7px; align-items: flex-start; padding: 10px 13px; border-top: 1px solid #f0e0c7; background: #fff7e8; color: #8c5818; font-size: 9px; line-height: 1.5; }
+.gauges-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 15px; align-items: start; }
+.gauges-main { display: grid; gap: 15px; }
+.gauge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px; }
+.gauge-card { border: 1px solid var(--line); border-radius: 6px; padding: 13px; background: #fcfdfd; }
+.gauge-card.occupied { border-color: #b9d2e6; box-shadow: inset 3px 0 0 #2f75a8; }
+.gauge-card.invalid { border-color: #e2b3b2; box-shadow: inset 3px 0 0 var(--red); background: #fdf7f7; }
+.gauge-card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.gauge-card-head > svg { color: #4a6b82; font-size: 19px; }
+.gauge-card-head strong, .gauge-card-head small { display: block; font-size: 12px; }
+.gauge-card-head small { font-size: 9px; color: var(--muted); margin-top: 2px; }
+.gauge-card-head .fui-Badge { margin-left: auto; }
+.gauge-card dl { margin: 0; }
+.gauge-card dl div { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px dashed #edf1f3; font-size: 10px; }
+.gauge-card dt { color: var(--muted); flex: none; }
+.gauge-card dd { margin: 0; text-align: right; }
+.gauge-card-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 9px; padding-top: 10px; border-top: 1px solid var(--line); }
+.gauges-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 11px 14px; border-top: 1px solid #f0e0c7; background: #fff7e8; color: #8c5818; font-size: 10px; line-height: 1.6; }
+.chain-ledger-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 14px; border-bottom: 1px solid #edf1f3; background: #fdf7f7; }
+.chain-ledger-row.valid { background: white; }
+.chain-ledger-main { min-width: 0; }
+.chain-ledger-main strong { font-size: 12px; }
+.chain-ledger-main small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px; }
+.chain-ledger-main small.retained { color: var(--red); }
+.chain-ledger-main b { color: #245b7e; }
+.chain-ledger-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.contention-panel .contention-form { display: grid; gap: 11px; padding: 14px; }
+.contention-log { border-top: 1px solid var(--line); padding: 8px 14px 12px; max-height: 300px; overflow: auto; }
+.contention-row { display: grid; grid-template-columns: 16px 1fr; gap: 7px; padding: 8px 0; }
+.contention-row .timeline-dot { background: var(--amber); box-shadow: 0 0 0 3px #f8ecd8; }
+.contention-row strong { font-size: 11px; }
+.contention-row p { margin: 3px 0; font-size: 10px; color: #596c78; }
+.contention-row small { font-size: 9px; color: var(--muted); }
+.baseline-panel { border-top: 1px solid var(--line); background: #f6fafc; }
+.baseline-panel .panel-head svg { color: var(--green); }
+.baseline-chains { padding: 10px 14px; display: grid; gap: 7px; }
+.baseline-chains > div { display: flex; align-items: center; gap: 10px; font-size: 10px; }
+.baseline-chains strong { width: 64px; }
+.baseline-chains span { color: var(--muted); flex: 1; }
+.baseline-chains b { color: #245b7e; }
+.baseline-sigs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 13px; }
+.baseline-sigs span { font-size: 9px; border: 1px solid #cfe0d8; background: #eef7f1; color: var(--green); border-radius: 20px; padding: 3px 9px; }
+
 @media (max-width: 1100px) {
   .overview-grid, .execution-grid, .release-grid, .audit-grid { grid-template-columns: 1fr; }
   .overview-side, .execution-side, .release-side { grid-template-columns: 1fr 1fr; }
+  .gauges-grid { grid-template-columns: 1fr; }
+  .gauge-form { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
+  .gauge-grid { grid-template-columns: 1fr; }
+  .gauge-form { grid-template-columns: 1fr; }
+  .chain-ledger-row { flex-direction: column; align-items: flex-start; }
   .app-header { padding: 0 12px; gap: 8px; }
   .brand { min-width: 0; }
   .brand span, .aircraft-chip > strong, .user-chip { display: none; }
